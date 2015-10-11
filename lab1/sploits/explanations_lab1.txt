@@ -1,0 +1,13 @@
+#Ding Zhu, 995668157, ding.zhu@mail.utoronto.ca
+
+Sploit 1: standard buffer overflow attack. Set the buffer with 128 bytes to just override the return address. fill the buffer with NOP, then copy over shell code , place new return address at the end.
+
+Sploit 2: need to override i and len to get pass 272 bytes limit. fill the buffer with NOP and copy over shell code. At the end of the buffer, place the new lens at the end of buffer. then put new address in env variable.
+
+Sploit 3: this one is easier as it declear len before i, so in stack, len is immediately after buff, a simple override of len will pass the copy limit.
+
+Sploit 4: use env variable to copy 0x0 to target buff. also use technique from previous sploits
+
+Sploit 5: standard format string attack, the trick is to copy 0x0 to format string. Again, mainly use env variable to pass 0x0 and almost not using buff.
+
+Sploit 6: need to fake 2 tag struct, first one with left side of shell code address, the other one with right side of RET address at stack. so once freed, the RET address with be override with new shell code address. The trick is to put a JMP 0x4 instuction at the begining of the shellcode address.
