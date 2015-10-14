@@ -25,8 +25,10 @@
 #define FMT_OUTPUT "ECE568-SERVER: %s %s\n"
 #define FMT_INCOMPLETE_CLOSE "ECE568-SERVER: Incomplete shutdown\n"
 
-/* Callback definition */
-typedef void (callback)(int);
+#define SERVER_CERTIFICATE "bob.pem"
+#define CA_CERTIFICATE "568ca.pem"
+
+typedef void (messageCallback)(SSL*);
 
 
 
@@ -48,6 +50,39 @@ void parseArguments(int argc, char** argv, Connection* conn){
 	}
 }
 
+// Check certification
+int checkClientCertification(SSL* ssl, char* host){
+	X509 *peer;
+	char peer_CN[256];
+
+	if (SSL_get_verify_result(ssl) != X509_V_OK)
+		printf("Certificate doesn't verify");
+
+	/*Check the common name*/
+	peer = SSL_get_peer_certificate(ssl);
+	X509_NAME_get_text_by_NID
+		(X509_get_subject_name(peer),
+		NID_commonName, peer_CN, 256);
+	if (strcasecmp(peer_CN, host))
+		printf("Common name doesn't match host name");
+}
+
+
+void handleError(SSL * ssl, int ret){
+	switch (SSL_get_error(ssl, ret)){
+		case SSL_ERROR_NONE:
+			return;
+		case SSL_ERROR_SYSCALL:
+			printf(FMT_INCOMPLETE_CLOSE);
+			break;
+		case SSL_ERROR_SSL:
+			printf("Protocal Error\n");
+	}
+
+	// print inner error
+	ERR_print_errors_fp(stderr);
+}
+
 
 
 
@@ -57,9 +92,9 @@ void stopServer(Connection* connection){
 }
 
 
-int startServer(Connection* connection, callback* cb){
+int startServer(Connection* connection, messageCallback* callback){
 	// local variables
-	int acceptSock;
+	int sock;
 	int optionVal = 1;
 	pid_t pid;
 
@@ -92,25 +127,46 @@ int startServer(Connection* connection, callback* cb){
 
 	// start processing
 	while (1){
-		if ((acceptSock = accept(connection->socket, NULL, 0)) < 0){
+		if ((sock = accept(connection->socket, NULL, 0)) < 0){
 			perror("accept");
-			close(acceptSock);
+			stopServer(connection);
+			close(sock);
 			return ACCEPT_ERROR;
 		}
 
 		/*fork a child to handle the connection*/
 		pid = fork();
 		if (pid == 0){
-			// child process execute callback
-			(*cb)(acceptSock);
+			// child process
+			// secure connection
+			SSL * ssl = SSL_new(ctx);
+			BIO * bio = BIO_new_socket(sock, BIO_NOCLOSE);
+			SSL_set_bio(ssl, bio, bio);
+			int ret;
+
+			ret = SSL_accept(ssl);
+			if (ret <= 0){
+				printf(FMT_ACCEPT_ERR); // accept error
+				handleError(ssl, ret);
+			} else {
+				(*messageCallback)(ssl);
+			}
+
+			// close ssl connection
+			if (!SSL_shutdown(ssl)){
+				close(sock);
+				SSL_shutdown(ssl);
+			}
+			SSL_free(ssl);
+
 			// close connection
 			stopServer(connection);
-			close(acceptSock);
+			close(sock);
 			return 0;
 		}
 		else{
 			// parent process
-			close(acceptSock);
+			close(sock);
 		}
 	}
 
@@ -119,16 +175,26 @@ int startServer(Connection* connection, callback* cb){
 
 
 
+
 /* Message Handling */
-void processMessage(int sock){
-	int len;
+void processMessage(SSL* ssl){
 	char buf[256];
 	char *answer = "42";
+	int ret;
 
-	len = recv(sock, &buf, 255, 0);
-	buf[len] = '\0';
-	printf(FMT_OUTPUT, buf, answer);
-	send(sock, answer, strlen(answer), 0);
+	// read request
+	ret = SSL_read(ssl, buf, sizeof(buf));
+	if (ret <= 0){
+		handleError(ssl, ret);
+		return;
+	}
+	
+	// write response
+	ret = SSL_write(ssl, answer, strlen(answer));
+	if (ret <= 0){
+		handleError(ssl, ret);
+		return;
+	}
 }
 
 
@@ -143,6 +209,14 @@ int main(int argc, char **argv)
 	// parse arguments
 	parseArguments(argc, argv, &conn);
 
+	// init SSL library
+	conn.sslContext = initSSLContext(SERVER_CERTIFICATE, CA_CERTIFICATE);
+
+	// explictly use SSL v2,v3 and TLS v1
+	SSL_CTX_set_cipher_list(conn.sslContext, "SSLv2:SSLv3:TLSv1");
+	SSL_CTX_set_verify(conn.sslContext, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, 0);
+
+
 	// start server
 	if (startServer(&conn, &processMessage) < 0){
 		stopServer(&conn);
@@ -150,5 +224,6 @@ int main(int argc, char **argv)
 	}
 
 	stopServer(&conn);
+	destroySSLContext(conn.sslContext);
 	return 1;
 }

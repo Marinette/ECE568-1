@@ -18,6 +18,9 @@
 #define SOCKET_ERROR -2
 #define CONNECT_ERROR -3
 
+#define CLIENT_CERTIFICATE "alice.pem"
+#define CA_CERTIFICATE "568ca.pem"
+
 /* use these strings to tell the marker what is happening */
 #define FMT_CONNECT_ERR "ECE568-CLIENT: SSL connect error\n"
 #define FMT_SERVER_INFO "ECE568-CLIENT: %s %s %s\n"
@@ -44,6 +47,28 @@ void parseArguments(int argc, char** argv, Connection* conn){
 		printf("Usage: %s server port\n", argv[0]);
 		exit(0);
 	}
+}
+
+// Check certification
+int checkClientCertification(SSL* ssl, char* host){
+
+
+
+}
+
+void handleError(SSL * ssl, int ret){
+	switch (SSL_get_error(ssl, ret)){
+	case SSL_ERROR_NONE:
+		return;
+	case SSL_ERROR_SYSCALL:
+		printf(FMT_INCORRECT_CLOSE);
+		break;
+	case SSL_ERROR_SSL:
+		printf("Protocal Error\n");
+	}
+
+	// print inner error
+	ERR_print_errors_fp(stderr);
 }
 
 
@@ -102,7 +127,6 @@ void processMessage(int sock){
 
 
 
-
 /* Main Entry */
 int main(int argc, char **argv)
 {
@@ -115,10 +139,30 @@ int main(int argc, char **argv)
 	// Parse arguments
 	parseArguments(argc, argv, &conn);
 
+	// init SSL library
+	conn.sslContext = initSSLContext(CLIENT_CERTIFICATE, CA_CERTIFICATE);
+	SSL_CTX_set_options(conn.sslContext, SSL_OP_NO_SSLv2);
+	SSL_CTX_set_cipher_list(conn.sslContext, "SHA1");
+
 	// Connect
 	if (tcpConnect(&conn) < 0){
 		tcpDisconnect(&conn);
 		exit(0);
+	}
+
+	SSL * ssl = SSL_new(ctx);
+	BIO * sbio = BIO_new_socket(sock, BIO_NOCLOSE);
+	SSL_set_bio(ssl, sbio, sbio);
+	int ret;
+
+	ret = SSL_connect(ssl);
+	if (ret <= 0){
+		printf(FMT_CONNECT_ERR);
+		handleError(ssl, ret);
+		
+	}
+	else{
+
 	}
 
 	// Process Message

@@ -16,11 +16,13 @@ typedef struct{
 	char* host;
 	int port;
 	struct sockaddr_in sin;
-	SSL * sslHandle;
 	SSL_CTX* sslContext;
+	BIO
 } Connection;
 
 
 
-SSL_CTX* initSSLContext();
+SSL_CTX* initSSLContext(char* keyFile, char* caFile);
+int passwordCallback(char *buf, int size, int rwflag, void *password);
+void destroySSLContext(SSL_CTX * ctx);
 
