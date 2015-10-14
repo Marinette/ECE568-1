@@ -8,8 +8,15 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include "common.h"
+
 #define HOST "localhost"
 #define PORT 8765
+
+#define OK 0
+#define ADDRESS_ERROR -1
+#define SOCKET_ERROR -2
+#define CONNECT_ERROR -3
 
 /* use these strings to tell the marker what is happening */
 #define FMT_CONNECT_ERR "ECE568-CLIENT: SSL connect error\n"
@@ -20,63 +27,104 @@
 #define FMT_NO_VERIFY "ECE568-CLIENT: Certificate does not verify\n"
 #define FMT_INCORRECT_CLOSE "ECE568-CLIENT: Premature close\n"
 
+/* Utility*/
+void parseArguments(int argc, char** argv, Connection* conn){
+	switch (argc){
+	case 1:
+		break;
+	case 3:
+		conn->host = argv[1];
+		conn->port = atoi(argv[2]);
+		if (conn->port<1 || conn->port>65535){
+			fprintf(stderr, "invalid port number");
+			exit(0);
+		}
+		break;
+	default:
+		printf("Usage: %s server port\n", argv[0]);
+		exit(0);
+	}
+}
+
+
+/* Tcp Connection */
+void tcpDisconnect(Connection* connection){
+	if (connection->socket){
+		close(connection->socket);
+	}
+}
+
+int tcpConnect(Connection* connection){
+	struct hostent *host_entry;
+
+	/*get ip address of the host*/
+	host_entry = gethostbyname(connection->host);
+	if (!host_entry){
+		fprintf(stderr, "Couldn't resolve host");
+		return ADDRESS_ERROR;
+	}
+
+	/* set up socket stream*/
+	memset(&connection->sin, 0, sizeof(connection->sin));
+	connection->sin.sin_addr = *(struct in_addr *) host_entry->h_addr_list[0];
+	connection->sin.sin_family = AF_INET;
+	connection->sin.sin_port = htons(connection->port);
+
+	printf("Connecting to %s(%s):%d\n", connection->host, inet_ntoa(connection->sin.sin_addr), connection->port);
+
+	/*open socket*/
+	if ((connection->socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0){
+		perror("socket");
+		return SOCKET_ERROR;
+	}
+	if (connect(connection->socket, (struct sockaddr *)&connection->sin, sizeof(connection->sin)) < 0){
+		perror("connect");
+		return CONNECT_ERROR;
+	}
+
+	return OK;
+}
+
+/* Message Handling */
+void processMessage(int sock){
+	int len;
+	char buf[256];
+	char *secret = "What's the question?";
+
+	send(sock, secret, strlen(secret), 0);
+	len = recv(sock, &buf, 255, 0);
+	buf[len] = '\0';
+
+	/* this is how you output something for the marker to pick up */
+	printf(FMT_OUTPUT, secret, buf);
+}
+
+
+
+
+
+/* Main Entry */
 int main(int argc, char **argv)
 {
-  int len, sock, port=PORT;
-  char *host=HOST;
-  struct sockaddr_in addr;
-  struct hostent *host_entry;
-  char buf[256];
-  char *secret = "What's the question?";
-  
-  /*Parse command line arguments*/
-  
-  switch(argc){
-	case 1:
-	  break;
-	case 3:
-	  host = argv[1];
-	  port=atoi(argv[2]);
-	  if (port<1||port>65535){
-	fprintf(stderr,"invalid port number");
-	exit(0);
-	  }
-	  break;
-	default:
-	  printf("Usage: %s server port\n", argv[0]);
-	  exit(0);
-  }
-  
-  /*get ip address of the host*/
-  
-  host_entry = gethostbyname(host);
-  
-  if (!host_entry){
-	fprintf(stderr,"Couldn't resolve host");
-	exit(0);
-  }
+	// init connection object
+	Connection conn;
+	memset(&conn, 0, sizeof(conn));
+	conn.port = PORT; // assign default port
+	conn.host = HOST;
 
-  memset(&addr,0,sizeof(addr));
-  addr.sin_addr=*(struct in_addr *) host_entry->h_addr_list[0];
-  addr.sin_family=AF_INET;
-  addr.sin_port=htons(port);
-  
-  printf("Connecting to %s(%s):%d\n", host, inet_ntoa(addr.sin_addr),port);
-  
-  /*open socket*/
-  
-  if((sock=socket(AF_INET, SOCK_STREAM, IPPROTO_TCP))<0)
-	perror("socket");
-  if(connect(sock,(struct sockaddr *)&addr, sizeof(addr))<0)
-	perror("connect");
-  
-  send(sock, secret, strlen(secret),0);
-  len = recv(sock, &buf, 255, 0);
-  buf[len]='\0';
-  
-  /* this is how you output something for the marker to pick up */
-  printf(FMT_OUTPUT, secret, buf);
-  
-  close(sock);
-  return 1;
+	// Parse arguments
+	parseArguments(argc, argv, &conn);
+
+	// Connect
+	if (tcpConnect(&conn) < 0){
+		tcpDisconnect(&conn);
+		exit(0);
+	}
+
+	// Process Message
+	processMessage(conn.socket);
+
+	// Disconnect
+	tcpDisconnect(&conn);
+	return 1;
 }
