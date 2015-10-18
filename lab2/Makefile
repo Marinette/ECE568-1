@@ -1,5 +1,5 @@
 CC := gcc
-CFLAGS := -Wall
+CFLAGS := -Wall -ggdb
 LIBS := -lssl -lcrypto
 LDFLAGS := $(LIBS)
 RM := rm -f

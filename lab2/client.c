@@ -17,9 +17,12 @@
 #define ADDRESS_ERROR -1
 #define SOCKET_ERROR -2
 #define CONNECT_ERROR -3
+#define SSL_ERROR -4
 
 #define CLIENT_CERTIFICATE "alice.pem"
 #define CA_CERTIFICATE "568ca.pem"
+#define SERVER_CN "Bob's Server"
+#define SERVER_EMAIL "ece568bob@ecf.utoronto.ca"
 
 /* use these strings to tell the marker what is happening */
 #define FMT_CONNECT_ERR "ECE568-CLIENT: SSL connect error\n"
@@ -50,10 +53,44 @@ void parseArguments(int argc, char** argv, Connection* conn){
 }
 
 // Check certification
-int checkClientCertification(SSL* ssl, char* host){
+int checkServerCertification(SSL* ssl){
 
+	X509* peer = SSL_get_peer_certificate(ssl);
 
+	if (!peer || (SSL_get_verify_result(ssl) != X509_V_OK) ) {
+		fprintf(stderr, FMT_NO_VERIFY); // Certificate does not verify
+		return SSL_ERROR;
+	}
 
+	//print client certificate info
+	char commonName[256];
+	char email[256];
+	char issuer[256];
+
+	X509_NAME *peerSubjectName = X509_get_subject_name(peer);
+	X509_NAME_get_text_by_NID(peerSubjectName, NID_commonName, commonName, 256);
+	X509_NAME_get_text_by_NID(peerSubjectName, NID_pkcs9_emailAddress, email, 256);
+
+	X509_NAME *issuer_name = X509_get_issuer_name(peer);
+	X509_NAME_get_text_by_NID(issuer_name, NID_commonName, issuer, 256);
+
+	X509_free(peer);
+
+	// Check CN
+	if (strcasecmp(commonName, SERVER_CN) != OK) {
+		fprintf(stderr, FMT_CN_MISMATCH); // Common Name mismatch
+		return SSL_ERROR;
+	}
+	// Check email
+	if (strcasecmp(email, SERVER_EMAIL) != OK) {
+		fprintf(stderr, FMT_EMAIL_MISMATCH); // Email mismatch
+		return SSL_ERROR;
+	}
+
+	// print out client info
+	printf(FMT_SERVER_INFO, commonName, email, issuer);
+
+	return OK;
 }
 
 void handleError(SSL * ssl, int ret){
@@ -61,10 +98,10 @@ void handleError(SSL * ssl, int ret){
 	case SSL_ERROR_NONE:
 		return;
 	case SSL_ERROR_SYSCALL:
-		printf(FMT_INCORRECT_CLOSE);
+		printf(FMT_INCORRECT_CLOSE); // incomplete close
 		break;
 	case SSL_ERROR_SSL:
-		printf("Protocal Error\n");
+		break;
 	}
 
 	// print inner error
@@ -111,14 +148,25 @@ int tcpConnect(Connection* connection){
 }
 
 /* Message Handling */
-void processMessage(int sock){
-	int len;
+void processMessage(SSL* ssl){
+	int ret;
 	char buf[256];
 	char *secret = "What's the question?";
+	memset(buf, 0, sizeof(buf));
 
-	send(sock, secret, strlen(secret), 0);
-	len = recv(sock, &buf, 255, 0);
-	buf[len] = '\0';
+	// write question
+	ret = SSL_write(ssl, secret, strlen(secret));
+	if (ret <= 0){
+		handleError(ssl, ret);
+		return;
+	}
+
+	// read answer
+	ret = SSL_read(ssl, buf, sizeof(buf));
+	if (ret <= 0){
+		handleError(ssl, ret);
+		return;
+	}
 
 	/* this is how you output something for the marker to pick up */
 	printf(FMT_OUTPUT, secret, buf);
@@ -150,8 +198,8 @@ int main(int argc, char **argv)
 		exit(0);
 	}
 
-	SSL * ssl = SSL_new(ctx);
-	BIO * sbio = BIO_new_socket(sock, BIO_NOCLOSE);
+	SSL * ssl = SSL_new(conn.sslContext);
+	BIO * sbio = BIO_new_socket(conn.socket, BIO_NOCLOSE);
 	SSL_set_bio(ssl, sbio, sbio);
 	int ret;
 
@@ -159,16 +207,23 @@ int main(int argc, char **argv)
 	if (ret <= 0){
 		printf(FMT_CONNECT_ERR);
 		handleError(ssl, ret);
-		
 	}
 	else{
-
+		// Process Message
+		if (checkServerCertification(ssl) == OK){
+			processMessage(ssl);
+		}
 	}
 
-	// Process Message
-	processMessage(conn.socket);
+	// close ssl connection
+	if (!SSL_shutdown(ssl)){
+		tcpDisconnect(&conn);
+		SSL_shutdown(ssl);
+	}
+	SSL_free(ssl);
 
 	// Disconnect
 	tcpDisconnect(&conn);
+	destroySSLContext(conn.sslContext);
 	return 1;
 }

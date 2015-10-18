@@ -18,6 +18,7 @@
 #define BIND_ERROR -2
 #define LISTEN_ERROR -3
 #define ACCEPT_ERROR -4
+#define SSL_ERROR -5
 
 /* use these strings to tell the marker what is happening */
 #define FMT_ACCEPT_ERR "ECE568-SERVER: SSL accept error\n"
@@ -51,20 +52,31 @@ void parseArguments(int argc, char** argv, Connection* conn){
 }
 
 // Check certification
-int checkClientCertification(SSL* ssl, char* host){
-	X509 *peer;
-	char peer_CN[256];
+int checkClientCertification(SSL* ssl){
 
-	if (SSL_get_verify_result(ssl) != X509_V_OK)
-		printf("Certificate doesn't verify");
+	X509* peer = SSL_get_peer_certificate(ssl);
 
-	/*Check the common name*/
-	peer = SSL_get_peer_certificate(ssl);
-	X509_NAME_get_text_by_NID
-		(X509_get_subject_name(peer),
-		NID_commonName, peer_CN, 256);
-	if (strcasecmp(peer_CN, host))
-		printf("Common name doesn't match host name");
+	if (!peer || (SSL_get_verify_result(ssl) != X509_V_OK)) {
+		fprintf(stderr, FMT_ACCEPT_ERR); // Certificate does not verify
+		ERR_print_errors_fp(stderr);
+		return SSL_ERROR;
+	}
+
+	//print client certificate info
+	char commonName[256];
+	char email[256];
+	char issuer[256];
+
+	X509_NAME *peerSubjectName = X509_get_subject_name(peer);
+	X509_NAME_get_text_by_NID(peerSubjectName, NID_commonName, commonName, 256);
+	X509_NAME_get_text_by_NID(peerSubjectName, NID_pkcs9_emailAddress, email, 256);
+
+	X509_free(peer);
+
+	// print out client info
+	printf(FMT_CLIENT_INFO, commonName, email);
+
+	return OK;
 }
 
 
@@ -73,10 +85,10 @@ void handleError(SSL * ssl, int ret){
 		case SSL_ERROR_NONE:
 			return;
 		case SSL_ERROR_SYSCALL:
-			printf(FMT_INCOMPLETE_CLOSE);
+			fprintf(stderr, FMT_INCOMPLETE_CLOSE);
 			break;
 		case SSL_ERROR_SSL:
-			printf("Protocal Error\n");
+			break;
 	}
 
 	// print inner error
@@ -139,7 +151,7 @@ int startServer(Connection* connection, messageCallback* callback){
 		if (pid == 0){
 			// child process
 			// secure connection
-			SSL * ssl = SSL_new(ctx);
+			SSL * ssl = SSL_new(connection->sslContext);
 			BIO * bio = BIO_new_socket(sock, BIO_NOCLOSE);
 			SSL_set_bio(ssl, bio, bio);
 			int ret;
@@ -149,7 +161,9 @@ int startServer(Connection* connection, messageCallback* callback){
 				printf(FMT_ACCEPT_ERR); // accept error
 				handleError(ssl, ret);
 			} else {
-				(*messageCallback)(ssl);
+				if (checkClientCertification(ssl) == OK){
+					(*callback)(ssl);
+				}
 			}
 
 			// close ssl connection
@@ -188,13 +202,15 @@ void processMessage(SSL* ssl){
 		handleError(ssl, ret);
 		return;
 	}
-	
+
 	// write response
 	ret = SSL_write(ssl, answer, strlen(answer));
 	if (ret <= 0){
 		handleError(ssl, ret);
 		return;
 	}
+
+	printf(FMT_OUTPUT, buf, answer);
 }
 
 

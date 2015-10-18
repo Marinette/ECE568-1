@@ -17,7 +17,6 @@ typedef struct{
 	int port;
 	struct sockaddr_in sin;
 	SSL_CTX* sslContext;
-	BIO
 } Connection;
 
 

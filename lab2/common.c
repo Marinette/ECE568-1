@@ -2,6 +2,8 @@
 
 
 
+
+
 SSL_CTX* initSSLContext(char* keyFile, char* caFile){
 	SSL_CTX* ctx;
 	SSL_METHOD * method;
@@ -17,7 +19,7 @@ SSL_CTX* initSSLContext(char* keyFile, char* caFile){
 
 	// load certificate and password
 	SSL_CTX_use_certificate_chain_file(ctx, keyFile);
-	SSL_CTX_set_defaultPasswd_cb(ctx, passwordCallback);
+	SSL_CTX_set_default_passwd_cb(ctx, passwordCallback);
 	SSL_CTX_use_PrivateKey_file(ctx, keyFile, SSL_FILETYPE_PEM);
 	SSL_CTX_load_verify_locations(ctx, caFile, 0);
 
