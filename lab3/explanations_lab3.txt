@@ -1,6 +1,3 @@
-Ding Zhu, 995668157, ding.zhu@mail.utoronto.ca
-Mohsin Khan, 998972606, mohsink.khan@mail.utoronto.ca
-
 a) supply "user=" with scripts that removes any elements with css class ".warning" then load a script to email script with document.cookie. Escape special characters e.g " => %22 
 
 b) create an invisible form that is exactly as transfer page with 10 zoobars, set its target to an invisible iframe. Use javascript to force submit the form. Put a "onload" listener on iframe, redirect to http://ece568.csl.toronto.edu/
