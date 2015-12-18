@@ -1,5 +1,3 @@
-#Ding Zhu, 995668157, ding.zhu@mail.utoronto.ca
-
 Sploit 1: standard buffer overflow attack. Set the buffer with 128 bytes to just override the return address. fill the buffer with NOP, then copy over shell code , place new return address at the end.
 
 Sploit 2: need to override i and len to get pass 272 bytes limit. fill the buffer with NOP and copy over shell code. At the end of the buffer, place the new lens at the end of buffer. then put new address in env variable.

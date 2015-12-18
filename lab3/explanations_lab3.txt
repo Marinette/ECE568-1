@@ -1,0 +1,7 @@
+a) supply "user=" with scripts that removes any elements with css class ".warning" then load a script to email script with document.cookie. Escape special characters e.g " => %22 
+
+b) create an invisible form that is exactly as transfer page with 10 zoobars, set its target to an invisible iframe. Use javascript to force submit the form. Put a "onload" listener on iframe, redirect to http://ece568.csl.toronto.edu/
+
+c) create an invisible form exactly like login page, supply an encoded script as username. This script remove warnings and attach listener to login form "submit" event. Email script will be injected via a <script> tag
+
+d) supply profile with <span id="zoobars" class=[script]. the script contains 2 ajax calls. one to transfer.php to perfrom transfer zoobars, another to profile.php to infect current user profile. 
